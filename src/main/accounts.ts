@@ -1,0 +1,108 @@
+import { BrowserWindow, WebContentsView, shell } from 'electron'
+import { join } from 'path'
+import type { Account } from './sidecar'
+
+const WHATSAPP_URL = 'https://web.whatsapp.com'
+const RAIL_WIDTH = 72
+// WhatsApp Web rejects/limits non-mainstream user agents; impersonate a recent desktop Chrome.
+const DESKTOP_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
+
+// Wraps the page's own Notification so WhatsApp's click-to-open-chat behavior keeps
+// working, while also telling the main process which account + to bring the window forward.
+const NOTIFICATION_BRIDGE_SCRIPT = `(() => {
+  if (window.__waNotifyPatched) return
+  window.__waNotifyPatched = true
+  const NativeNotification = window.Notification
+  function PatchedNotification(title, options) {
+    const instance = new NativeNotification(title, options)
+    instance.addEventListener('click', () => {
+      if (window.waBridge) window.waBridge.notifyClick()
+    })
+    return instance
+  }
+  PatchedNotification.permission = NativeNotification.permission
+  PatchedNotification.requestPermission = NativeNotification.requestPermission.bind(NativeNotification)
+  window.Notification = PatchedNotification
+})()`
+
+export class AccountManager {
+  private views = new Map<string, WebContentsView>()
+  private activeId: string | null = null
+
+  constructor(private window: BrowserWindow) {
+    this.window.on('resize', () => this.layoutActive())
+  }
+
+  private ensure(account: Account): WebContentsView {
+    let view = this.views.get(account.id)
+    if (view) return view
+
+    view = new WebContentsView({
+      webPreferences: {
+        partition: account.partition,
+        preload: join(__dirname, '../preload/whatsapp.js'),
+        additionalArguments: [`--wa-account-id=${account.id}`],
+        sandbox: false
+      }
+    })
+    view.webContents.setUserAgent(DESKTOP_USER_AGENT)
+
+    // Grant notifications (native alerts) and media (camera/mic for voice & video
+    // calls), deny everything else by default.
+    const allowedPermissions = new Set(['notifications', 'media'])
+    view.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
+      callback(allowedPermissions.has(permission))
+    })
+    view.webContents.session.setPermissionCheckHandler((_wc, permission) => allowedPermissions.has(permission))
+
+    view.webContents.setWindowOpenHandler((details) => {
+      shell.openExternal(details.url)
+      return { action: 'deny' }
+    })
+    view.webContents.on('did-finish-load', () => {
+      view?.webContents.executeJavaScript(NOTIFICATION_BRIDGE_SCRIPT).catch((err) => {
+        console.error('[notify-bridge] failed to inject:', err)
+      })
+    })
+    view.webContents.loadURL(WHATSAPP_URL)
+
+    this.views.set(account.id, view)
+    return view
+  }
+
+  // Creates (and starts loading/connecting) the view without making it visible,
+  // so background accounts stay synced and their notifications keep firing even
+  // while a different account is the one shown on screen.
+  preload(account: Account): void {
+    this.ensure(account)
+  }
+
+  switchTo(account: Account): void {
+    const view = this.ensure(account)
+    if (this.activeId && this.activeId !== account.id) {
+      const prev = this.views.get(this.activeId)
+      if (prev) this.window.contentView.removeChildView(prev)
+    }
+    this.activeId = account.id
+    this.window.contentView.addChildView(view)
+    this.layoutActive()
+  }
+
+  remove(id: string): void {
+    const view = this.views.get(id)
+    if (!view) return
+    this.window.contentView.removeChildView(view)
+    view.webContents.close()
+    this.views.delete(id)
+    if (this.activeId === id) this.activeId = null
+  }
+
+  layoutActive(): void {
+    if (!this.activeId) return
+    const view = this.views.get(this.activeId)
+    if (!view) return
+    const { width, height } = this.window.getContentBounds()
+    view.setBounds({ x: RAIL_WIDTH, y: 0, width: Math.max(width - RAIL_WIDTH, 0), height })
+  }
+}
