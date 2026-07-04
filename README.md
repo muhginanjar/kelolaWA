@@ -4,6 +4,10 @@ Unofficial WhatsApp Web desktop wrapper for Windows, macOS, and Linux — multip
 
 > **Disclaimer:** kelolaWA is an independent, unofficial desktop client that wraps `web.whatsapp.com` in a native window. It is not affiliated with, endorsed by, or sponsored by WhatsApp or Meta Platforms, Inc. "WhatsApp" is a trademark of Meta Platforms, Inc.
 
+![kelolaWA main window with the account rail on the left; chat content is blurred for privacy](screenshots/main-window.png)
+
+_Chat list and conversation are blurred — that part is just regular WhatsApp Web. The rail on the left (with the three accounts) is what kelolaWA adds._
+
 ## Features
 
 - **Multiple accounts** — add as many WhatsApp accounts as you like, each isolated in its own session (its own cookies/login, independent of the others). Switch between them from a rail on the left; every account keeps syncing in the background even while you're looking at a different one.
