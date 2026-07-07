@@ -8,5 +8,6 @@ function getAccountId(): string {
 const accountId = getAccountId()
 
 contextBridge.exposeInMainWorld('waBridge', {
-  notifyClick: (): void => ipcRenderer.send('wa:notification-click', accountId)
+  notifyClick: (): void => ipcRenderer.send('wa:notification-click', accountId),
+  notifyOnline: (): void => ipcRenderer.send('wa:online', accountId)
 })

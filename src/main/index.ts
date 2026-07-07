@@ -192,6 +192,7 @@ function updateTrayMenu(): void {
   if (!tray) return
   const menu = Menu.buildFromTemplate([
     { label: 'Buka WhatsApp', click: () => showMainWindow() },
+    { label: 'Muat Ulang', click: () => accountManager?.reloadActive() },
     { label: 'Pengaturan', click: () => openSettingsWindow() },
     { type: 'separator' },
     {
@@ -326,6 +327,10 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.on('shell:open-settings', () => openSettingsWindow())
+
+  ipcMain.on('wa:online', (_event, accountId: string) => {
+    accountManager?.reload(accountId)
+  })
 
   ipcMain.on('wa:notification-click', (_event, accountId: string) => {
     const account = settings.accounts.find((a) => a.id === accountId)

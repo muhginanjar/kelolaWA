@@ -10,9 +10,12 @@ const DESKTOP_USER_AGENT =
 
 // Wraps the page's own Notification so WhatsApp's click-to-open-chat behavior keeps
 // working, while also telling the main process which account + to bring the window forward.
-const NOTIFICATION_BRIDGE_SCRIPT = `(() => {
-  if (window.__waNotifyPatched) return
-  window.__waNotifyPatched = true
+// Also reports the browser's own online/offline transitions so a force-reload can
+// recover WhatsApp Web from a stuck "connecting..." state once the network is back,
+// without touching cookies/localStorage (a reload keeps the session logged in).
+const PAGE_BRIDGE_SCRIPT = `(() => {
+  if (window.__waBridgePatched) return
+  window.__waBridgePatched = true
   const NativeNotification = window.Notification
   function PatchedNotification(title, options) {
     const instance = new NativeNotification(title, options)
@@ -24,6 +27,10 @@ const NOTIFICATION_BRIDGE_SCRIPT = `(() => {
   PatchedNotification.permission = NativeNotification.permission
   PatchedNotification.requestPermission = NativeNotification.requestPermission.bind(NativeNotification)
   window.Notification = PatchedNotification
+
+  window.addEventListener('online', () => {
+    if (window.waBridge) window.waBridge.notifyOnline()
+  })
 })()`
 
 export class AccountManager {
@@ -61,8 +68,8 @@ export class AccountManager {
       return { action: 'deny' }
     })
     view.webContents.on('did-finish-load', () => {
-      view?.webContents.executeJavaScript(NOTIFICATION_BRIDGE_SCRIPT).catch((err) => {
-        console.error('[notify-bridge] failed to inject:', err)
+      view?.webContents.executeJavaScript(PAGE_BRIDGE_SCRIPT).catch((err) => {
+        console.error('[page-bridge] failed to inject:', err)
       })
     })
     view.webContents.loadURL(WHATSAPP_URL)
@@ -87,6 +94,16 @@ export class AccountManager {
     this.activeId = account.id
     this.window.contentView.addChildView(view)
     this.layoutActive()
+  }
+
+  // Reloads the page in place (same as a browser refresh) — cookies, localStorage
+  // and IndexedDB survive, so the WhatsApp session stays logged in.
+  reload(id: string): void {
+    this.views.get(id)?.webContents.reload()
+  }
+
+  reloadActive(): void {
+    if (this.activeId) this.reload(this.activeId)
   }
 
   remove(id: string): void {
