@@ -1,16 +1,6 @@
 import { BrowserWindow, WebContentsView, shell } from 'electron'
-import type { Input } from 'electron'
 import { join } from 'path'
 import type { Account } from './sidecar'
-
-// Cmd+` (Ctrl+` on Windows/Linux) cycles to the next account; adding Shift goes
-// to the previous one — the same convention macOS uses for cycling app windows.
-function matchesCycleShortcut(input: Input): 1 | -1 | null {
-  if (input.type !== 'keyDown' || input.key !== '`' || input.alt) return null
-  const modifierPressed = process.platform === 'darwin' ? input.meta : input.control
-  if (!modifierPressed) return null
-  return input.shift ? -1 : 1
-}
 
 const WHATSAPP_URL = 'https://web.whatsapp.com'
 const RAIL_WIDTH = 72
@@ -47,17 +37,8 @@ export class AccountManager {
   private views = new Map<string, WebContentsView>()
   private activeId: string | null = null
 
-  constructor(
-    private window: BrowserWindow,
-    private onCycleShortcut: (direction: 1 | -1) => void
-  ) {
+  constructor(private window: BrowserWindow) {
     this.window.on('resize', () => this.layoutActive())
-    this.window.webContents.on('before-input-event', (event, input) => {
-      const direction = matchesCycleShortcut(input)
-      if (direction === null) return
-      event.preventDefault()
-      this.onCycleShortcut(direction)
-    })
   }
 
   private ensure(account: Account): WebContentsView {
@@ -85,12 +66,6 @@ export class AccountManager {
     view.webContents.setWindowOpenHandler((details) => {
       shell.openExternal(details.url)
       return { action: 'deny' }
-    })
-    view.webContents.on('before-input-event', (event, input) => {
-      const direction = matchesCycleShortcut(input)
-      if (direction === null) return
-      event.preventDefault()
-      this.onCycleShortcut(direction)
     })
     view.webContents.on('did-finish-load', () => {
       view?.webContents.executeJavaScript(PAGE_BRIDGE_SCRIPT).catch((err) => {

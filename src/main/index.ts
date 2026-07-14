@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, globalShortcut } from 'electron'
 import { randomUUID } from 'crypto'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -100,6 +100,24 @@ function cycleAccount(direction: 1 | -1): void {
   if (next) switchToAccount(next.id)
 }
 
+const CYCLE_NEXT_ACCELERATOR = 'CommandOrControl+`'
+const CYCLE_PREV_ACCELERATOR = 'CommandOrControl+Shift+`'
+
+// macOS reserves Cmd+` at the OS level for cycling windows of the same app, so it
+// never reaches a normal renderer key-event listener. globalShortcut registers
+// directly with the OS instead, which can claim the combo — but only while
+// kelolaWA's own window is focused, so it doesn't hijack the shortcut from
+// whatever app the user switches to next.
+function registerAccountShortcuts(): void {
+  globalShortcut.register(CYCLE_NEXT_ACCELERATOR, () => cycleAccount(1))
+  globalShortcut.register(CYCLE_PREV_ACCELERATOR, () => cycleAccount(-1))
+}
+
+function unregisterAccountShortcuts(): void {
+  globalShortcut.unregister(CYCLE_NEXT_ACCELERATOR)
+  globalShortcut.unregister(CYCLE_PREV_ACCELERATOR)
+}
+
 function showMainWindow(): void {
   if (!mainWindow) return
   if (mainWindow.isMinimized()) mainWindow.restore()
@@ -150,6 +168,10 @@ function createMainWindow(): void {
   mainWindow.on('resize', saveWindowBoundsDebounced)
   mainWindow.on('move', saveWindowBoundsDebounced)
 
+  mainWindow.on('focus', registerAccountShortcuts)
+  mainWindow.on('blur', unregisterAccountShortcuts)
+  if (mainWindow.isFocused()) registerAccountShortcuts()
+
   mainWindow.on('close', (event) => {
     if (!isQuitting && settings.minimizeToTray) {
       event.preventDefault()
@@ -165,7 +187,7 @@ function createMainWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  accountManager = new AccountManager(mainWindow, cycleAccount)
+  accountManager = new AccountManager(mainWindow)
   const account = activeAccount()
   if (account) accountManager.switchTo(account)
 
@@ -367,5 +389,6 @@ app.on('before-quit', () => {
 })
 
 app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
   sidecar.stop()
 })
