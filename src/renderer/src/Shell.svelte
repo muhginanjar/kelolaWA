@@ -20,6 +20,10 @@
 
   refresh()
 
+  window.api.onActiveAccountChanged((id) => {
+    activeId = id
+  })
+
   async function select(id: string): Promise<void> {
     activeId = id
     await window.api.switchAccount(id)

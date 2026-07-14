@@ -18,6 +18,7 @@ declare global {
       removeAccount: (id: string) => Promise<AccountsState>
       renameAccount: (id: string, name: string) => Promise<AccountsState>
       openSettings: () => void
+      onActiveAccountChanged: (callback: (id: string) => void) => void
     }
   }
 }

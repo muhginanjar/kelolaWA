@@ -81,6 +81,25 @@ function activeAccount(): Account | undefined {
   return settings.accounts.find((a) => a.id === settings.activeAccountId)
 }
 
+function switchToAccount(id: string): void {
+  const account = settings.accounts.find((a) => a.id === id)
+  if (!account || !accountManager) return
+  accountManager.switchTo(account)
+  settings.activeAccountId = id
+  mainWindow?.webContents.send('accounts:active-changed', id)
+  sidecar.setSettings({ activeAccountId: id }).catch((err) => {
+    console.error('[settings] failed to save active account:', err)
+  })
+}
+
+function cycleAccount(direction: 1 | -1): void {
+  if (settings.accounts.length < 2) return
+  const currentIndex = settings.accounts.findIndex((a) => a.id === settings.activeAccountId)
+  const nextIndex = (currentIndex + direction + settings.accounts.length) % settings.accounts.length
+  const next = settings.accounts[nextIndex]
+  if (next) switchToAccount(next.id)
+}
+
 function showMainWindow(): void {
   if (!mainWindow) return
   if (mainWindow.isMinimized()) mainWindow.restore()
@@ -146,7 +165,7 @@ function createMainWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  accountManager = new AccountManager(mainWindow)
+  accountManager = new AccountManager(mainWindow, cycleAccount)
   const account = activeAccount()
   if (account) accountManager.switchTo(account)
 
@@ -262,15 +281,7 @@ app.whenReady().then(async () => {
     activeAccountId: settings.activeAccountId
   }))
 
-  ipcMain.handle('accounts:switch', (_event, id: string) => {
-    const account = settings.accounts.find((a) => a.id === id)
-    if (!account || !accountManager) return
-    accountManager.switchTo(account)
-    settings.activeAccountId = id
-    sidecar.setSettings({ activeAccountId: id }).catch((err) => {
-      console.error('[settings] failed to save active account:', err)
-    })
-  })
+  ipcMain.handle('accounts:switch', (_event, id: string) => switchToAccount(id))
 
   ipcMain.handle('accounts:add', async (_event, name: string) => {
     const account: Account = {
@@ -333,12 +344,7 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.on('wa:notification-click', (_event, accountId: string) => {
-    const account = settings.accounts.find((a) => a.id === accountId)
-    if (account && accountManager) {
-      accountManager.switchTo(account)
-      settings.activeAccountId = accountId
-      sidecar.setSettings({ activeAccountId: accountId }).catch(() => {})
-    }
+    switchToAccount(accountId)
     showMainWindow()
   })
 

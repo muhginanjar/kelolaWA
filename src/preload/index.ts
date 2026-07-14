@@ -18,7 +18,10 @@ const api = {
   removeAccount: (id: string): Promise<AccountsState> => ipcRenderer.invoke('accounts:remove', id),
   renameAccount: (id: string, name: string): Promise<AccountsState> =>
     ipcRenderer.invoke('accounts:rename', id, name),
-  openSettings: (): void => ipcRenderer.send('shell:open-settings')
+  openSettings: (): void => ipcRenderer.send('shell:open-settings'),
+  onActiveAccountChanged: (callback: (id: string) => void): void => {
+    ipcRenderer.on('accounts:active-changed', (_event, id: string) => callback(id))
+  }
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
