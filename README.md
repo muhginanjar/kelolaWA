@@ -16,6 +16,9 @@ _Chat list and conversation are blurred — that part is just regular WhatsApp W
 - **Tray icon** — closing the window minimizes to the system tray instead of quitting; the app keeps running and notifying in the background.
 - **Launch at login** — optionally start kelolaWA automatically when you log in, either with the window shown or minimized straight to the tray.
 - **Rename / remove accounts** — double-click an account's avatar to rename it; hover and click the small × to remove it.
+- **Keyboard shortcut to switch accounts** — Cmd (Ctrl on Windows/Linux) + backtick cycles to the next account, the same convention macOS uses for cycling windows; add Shift to go to the previous one instead.
+- **Auto-reload on reconnect** — if the network drops and comes back, the affected account's view reloads itself automatically so WhatsApp Web doesn't stay stuck "connecting…"; there's also a manual "Muat Ulang" item in the tray menu. Either way it's just a page reload, so the session stays logged in.
+- **`whatsapp://` deep links** — kelolaWA registers itself as the handler for `whatsapp://send?phone=...&text=...` links (the scheme click-to-chat buttons and the official WhatsApp desktop app both use). With more than one account, it asks which one to open the chat in before deep-linking straight to it.
 
 ## Tech stack
 
@@ -58,7 +61,7 @@ src/
     accounts.ts     per-account WebContentsView manager (session isolation, notifications)
     sidecar.ts      client for talking to the Rust settings sidecar
   preload/         contextBridge preload scripts (shell/settings window + per-account WhatsApp view)
-  renderer/        Svelte UI (account rail, settings window)
+  renderer/        Svelte UI (account rail, settings window, account-picker window)
 rust-sidecar/      Rust binary that reads/writes settings.json over stdio
 resources/         app + tray icons
 build/             electron-builder resources (icons, entitlements)
@@ -67,6 +70,10 @@ build/             electron-builder resources (icons, entitlements)
 ## How multi-account works
 
 Each account gets its own Electron session partition (except the first, which reuses the default session so an existing login isn't lost on upgrade). That means separate cookies, local storage, and IndexedDB per account — WhatsApp Web has no idea it's sharing the machine with other logged-in numbers. All accounts are loaded in the background on startup so notifications keep working for accounts you aren't currently viewing; only the active one is attached to the visible window.
+
+## How the whatsapp:// deep link works
+
+kelolaWA registers itself as the OS handler for the `whatsapp://` custom URL scheme (not `https://wa.me/...` — that's Meta's own https domain, and no third-party desktop app can register itself as the handler for someone else's https domain without that domain owner's cooperation). A single-instance lock means clicking a link when kelolaWA is already running hands the URL to that existing process instead of launching a second copy. With one account it deep-links straight there; with more than one, a small modal window asks which account to use first.
 
 ## License
 
