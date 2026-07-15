@@ -7,6 +7,12 @@ interface AccountsState {
   activeAccountId?: string
 }
 
+interface PendingChatRequest {
+  accounts: Account[]
+  phone?: string
+  text?: string
+}
+
 // Custom APIs for renderer
 const api = {
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
@@ -21,7 +27,9 @@ const api = {
   openSettings: (): void => ipcRenderer.send('shell:open-settings'),
   onActiveAccountChanged: (callback: (id: string) => void): void => {
     ipcRenderer.on('accounts:active-changed', (_event, id: string) => callback(id))
-  }
+  },
+  getPendingChatRequest: (): Promise<PendingChatRequest> => ipcRenderer.invoke('picker:get-pending'),
+  choosePickerAccount: (id: string): void => ipcRenderer.send('picker:choose', id)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

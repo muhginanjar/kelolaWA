@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, globalShortcut } from 'electron'
 import { randomUUID } from 'crypto'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import trayIconTemplate from '../../resources/trayIconTemplate.png?asset'
@@ -11,6 +11,41 @@ import { AccountManager } from './accounts'
 // About panel; has no effect in unpackaged dev mode, where macOS always shows the
 // literal Electron.app bundle's name ("Electron") regardless of this call.
 app.setName('kelolaWA')
+
+const PROTOCOL_SCHEME = 'whatsapp'
+
+// Only one running instance should own the settings file, the tray icon, and
+// whatsapp:// links; a second launch attempt hands its args to this one instead.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+  process.exit(0)
+}
+
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(PROTOCOL_SCHEME, process.execPath, [resolve(process.argv[1])])
+  }
+} else {
+  app.setAsDefaultProtocolClient(PROTOCOL_SCHEME)
+}
+
+// Queued until accounts are loaded if a whatsapp:// link launches the app cold.
+let pendingProtocolUrl: string | null = null
+
+// macOS delivers whatsapp:// links via this event instead of process.argv, and it
+// can fire before app.whenReady() resolves, so register it immediately.
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  handleProtocolUrl(url)
+})
+
+// Windows/Linux: a second whatsapp:// launch starts a new process that immediately
+// hands its argv to the already-running instance via this event, then exits.
+app.on('second-instance', (_event, argv) => {
+  const url = argv.find((arg) => arg.startsWith(`${PROTOCOL_SCHEME}://`))
+  if (url) handleProtocolUrl(url)
+  showMainWindow()
+})
 
 const DEFAULT_SETTINGS: AppSettings = {
   minimizeToTray: true,
@@ -45,6 +80,8 @@ const sidecar = new Sidecar()
 let settings: AppSettings = DEFAULT_SETTINGS
 let mainWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
+let pickerWindow: BrowserWindow | null = null
+let pendingChatRequest: { phone?: string; text?: string } | null = null
 let accountManager: AccountManager | null = null
 let tray: Tray | null = null
 let isQuitting = false
@@ -98,6 +135,79 @@ function cycleAccount(direction: 1 | -1): void {
   const nextIndex = (currentIndex + direction + settings.accounts.length) % settings.accounts.length
   const next = settings.accounts[nextIndex]
   if (next) switchToAccount(next.id)
+}
+
+// Parses whatsapp://send?phone=...&text=... (also accepts a /send path segment,
+// which some click-to-chat generators use instead of the query-only form).
+function parseWhatsAppUrl(raw: string): { phone?: string; text?: string } | null {
+  try {
+    const url = new URL(raw)
+    return {
+      phone: url.searchParams.get('phone') ?? undefined,
+      text: url.searchParams.get('text') ?? undefined
+    }
+  } catch (err) {
+    console.error('[protocol] failed to parse url:', raw, err)
+    return null
+  }
+}
+
+function openChatDeepLink(phone?: string, text?: string): void {
+  if (settings.accounts.length <= 1) {
+    const only = settings.accounts[0]
+    if (!only) return
+    switchToAccount(only.id)
+    accountManager?.openChat(only.id, phone, text)
+    showMainWindow()
+    return
+  }
+  pendingChatRequest = { phone, text }
+  openPickerWindow()
+}
+
+function handleProtocolUrl(url: string): void {
+  if (!accountManager || settings.accounts.length === 0) {
+    pendingProtocolUrl = url
+    return
+  }
+  const parsed = parseWhatsAppUrl(url)
+  if (parsed) openChatDeepLink(parsed.phone, parsed.text)
+}
+
+function openPickerWindow(): void {
+  if (pickerWindow) {
+    pickerWindow.show()
+    pickerWindow.focus()
+    return
+  }
+
+  pickerWindow = new BrowserWindow({
+    width: 360,
+    height: 420,
+    resizable: false,
+    title: 'Pilih Akun - kelolaWA',
+    autoHideMenuBar: true,
+    // Attached to the main window so it can't get buried behind it if the user
+    // clicks back into kelolaWA before picking an account.
+    parent: mainWindow ?? undefined,
+    modal: true,
+    ...(process.platform === 'linux' ? { icon } : {}),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false
+    }
+  })
+
+  pickerWindow.on('closed', () => {
+    pickerWindow = null
+    pendingChatRequest = null
+  })
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    pickerWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/picker.html`)
+  } else {
+    pickerWindow.loadFile(join(__dirname, '../renderer/picker.html'))
+  }
 }
 
 const CYCLE_NEXT_ACCELERATOR = 'CommandOrControl+`'
@@ -370,8 +480,33 @@ app.whenReady().then(async () => {
     showMainWindow()
   })
 
+  ipcMain.handle('picker:get-pending', () => ({
+    accounts: settings.accounts,
+    phone: pendingChatRequest?.phone,
+    text: pendingChatRequest?.text
+  }))
+
+  ipcMain.on('picker:choose', (_event, id: string) => {
+    const request = pendingChatRequest
+    pendingChatRequest = null
+    switchToAccount(id)
+    if (request) accountManager?.openChat(id, request.phone, request.text)
+    pickerWindow?.close()
+    showMainWindow()
+  })
+
   createMainWindow()
   createTray()
+
+  // A whatsapp:// launch on Windows/Linux passes the URL as a plain CLI arg to
+  // this very process (there's no 'open-url' event outside macOS).
+  const argUrl = process.argv.find((arg) => arg.startsWith(`${PROTOCOL_SCHEME}://`))
+  if (argUrl) handleProtocolUrl(argUrl)
+  if (pendingProtocolUrl) {
+    const url = pendingProtocolUrl
+    pendingProtocolUrl = null
+    handleProtocolUrl(url)
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()

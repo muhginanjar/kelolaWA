@@ -6,6 +6,12 @@ interface AccountsState {
   activeAccountId?: string
 }
 
+interface PendingChatRequest {
+  accounts: Account[]
+  phone?: string
+  text?: string
+}
+
 declare global {
   interface Window {
     electron: ElectronAPI
@@ -19,6 +25,8 @@ declare global {
       renameAccount: (id: string, name: string) => Promise<AccountsState>
       openSettings: () => void
       onActiveAccountChanged: (callback: (id: string) => void) => void
+      getPendingChatRequest: () => Promise<PendingChatRequest>
+      choosePickerAccount: (id: string) => void
     }
   }
 }

@@ -96,6 +96,17 @@ export class AccountManager {
     this.layoutActive()
   }
 
+  // Deep-links a specific account straight to a chat (from a whatsapp:// link).
+  openChat(id: string, phone?: string, text?: string): void {
+    const view = this.views.get(id)
+    if (!view) return
+    const params = new URLSearchParams()
+    if (phone) params.set('phone', phone)
+    if (text) params.set('text', text)
+    const query = params.toString()
+    view.webContents.loadURL(`https://web.whatsapp.com/send${query ? `?${query}` : ''}`)
+  }
+
   // Reloads the page in place (same as a browser refresh) — cookies, localStorage
   // and IndexedDB survive, so the WhatsApp session stays logged in.
   reload(id: string): void {
