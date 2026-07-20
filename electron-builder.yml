@@ -11,9 +11,6 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
-extraResources:
-  - from: rust-sidecar/target/release/rust-sidecar
-    to: rust-sidecar/rust-sidecar
 protocols:
   name: WhatsApp Link
   schemes:
@@ -22,6 +19,9 @@ asarUnpack:
   - resources/**
 win:
   executableName: kelolawa
+  extraResources:
+    - from: rust-sidecar/target/release/rust-sidecar.exe
+      to: rust-sidecar/rust-sidecar.exe
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
@@ -35,18 +35,24 @@ mac:
     - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
+  extraResources:
+    - from: rust-sidecar/target/release/rust-sidecar
+      to: rust-sidecar/rust-sidecar
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:
   target:
     - AppImage
-    - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: kelolaWA
   category: Utility
+  extraResources:
+    - from: rust-sidecar/target/release/rust-sidecar
+      to: rust-sidecar/rust-sidecar
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: muhginanjar
+  repo: kelolaWA

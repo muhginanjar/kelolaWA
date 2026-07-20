@@ -47,10 +47,25 @@ npm run dev
 ```bash
 npm run build:mac     # macOS (.app, .dmg)
 npm run build:win     # Windows (.exe, NSIS installer)
-npm run build:linux   # Linux (AppImage, deb, snap)
+npm run build:linux   # Linux (AppImage, deb)
 ```
 
 Output goes to `dist/`. Note that on macOS, in dev mode the app always shows up as "Electron" in the menu bar and Dock — that's an Electron limitation for unpackaged apps. A `npm run build:mac` (or `npm run build:unpack` for a quick unsigned local build) produces a properly named/iconed `.app`.
+
+Builds are unsigned (no Apple Developer / Windows code-signing certificate configured), so macOS Gatekeeper and Windows SmartScreen will warn on first launch — that's expected for a project without a paid signing certificate; users just need to right-click → Open (macOS) or click "More info" → "Run anyway" (Windows) once.
+
+## Releasing (GitHub Actions)
+
+`.github/workflows/release.yml` builds macOS, Windows, and Linux in parallel on their native GitHub-hosted runners and attaches the installers to a GitHub Release, triggered by pushing a version tag:
+
+```bash
+npm version 0.2.0 --no-git-tag-version   # bump the version in package.json
+git commit -am "Release 0.2.0"
+git tag v0.2.0
+git push origin main --tags
+```
+
+No extra secrets to configure — it uses the repo's built-in `GITHUB_TOKEN`.
 
 ## Project structure
 
