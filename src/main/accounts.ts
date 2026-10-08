@@ -33,11 +33,18 @@ const PAGE_BRIDGE_SCRIPT = `(() => {
   })
 })()`
 
+// WhatsApp Web prefixes the page title with the unread-chat count, e.g. "(3) WhatsApp".
+const UNREAD_TITLE_PATTERN = /^\((\d+)\)/
+
 export class AccountManager {
   private views = new Map<string, WebContentsView>()
+  private unread = new Map<string, number>()
   private activeId: string | null = null
 
-  constructor(private window: BrowserWindow) {
+  constructor(
+    private window: BrowserWindow,
+    private onUnreadChange: () => void
+  ) {
     this.window.on('resize', () => this.layoutActive())
   }
 
@@ -61,7 +68,9 @@ export class AccountManager {
     view.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
       callback(allowedPermissions.has(permission))
     })
-    view.webContents.session.setPermissionCheckHandler((_wc, permission) => allowedPermissions.has(permission))
+    view.webContents.session.setPermissionCheckHandler((_wc, permission) =>
+      allowedPermissions.has(permission)
+    )
 
     view.webContents.setWindowOpenHandler((details) => {
       shell.openExternal(details.url)
@@ -72,10 +81,30 @@ export class AccountManager {
         console.error('[page-bridge] failed to inject:', err)
       })
     })
+    view.webContents.on('page-title-updated', (_event, title) => {
+      const match = UNREAD_TITLE_PATTERN.exec(title)
+      this.setUnread(account.id, match ? Number(match[1]) : 0)
+    })
     view.webContents.loadURL(WHATSAPP_URL)
 
     this.views.set(account.id, view)
     return view
+  }
+
+  private setUnread(id: string, count: number): void {
+    if ((this.unread.get(id) ?? 0) === count) return
+    this.unread.set(id, count)
+    this.onUnreadChange()
+  }
+
+  unreadCounts(): Record<string, number> {
+    return Object.fromEntries(this.unread)
+  }
+
+  totalUnread(): number {
+    let total = 0
+    for (const count of this.unread.values()) total += count
+    return total
   }
 
   // Creates (and starts loading/connecting) the view without making it visible,
@@ -124,6 +153,7 @@ export class AccountManager {
     view.webContents.close()
     this.views.delete(id)
     if (this.activeId === id) this.activeId = null
+    if (this.unread.delete(id)) this.onUnreadChange()
   }
 
   layoutActive(): void {

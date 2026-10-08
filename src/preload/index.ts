@@ -28,7 +28,16 @@ const api = {
   onActiveAccountChanged: (callback: (id: string) => void): void => {
     ipcRenderer.on('accounts:active-changed', (_event, id: string) => callback(id))
   },
-  getPendingChatRequest: (): Promise<PendingChatRequest> => ipcRenderer.invoke('picker:get-pending'),
+  getUnreadCounts: (): Promise<Record<string, number>> => ipcRenderer.invoke('accounts:unread'),
+  onUnreadChanged: (callback: (counts: Record<string, number>) => void): void => {
+    ipcRenderer.on('accounts:unread-changed', (_event, counts: Record<string, number>) =>
+      callback(counts)
+    )
+  },
+  setBadgeOverlay: (dataUrl: string | null, description: string): void =>
+    ipcRenderer.send('shell:badge-overlay', dataUrl, description),
+  getPendingChatRequest: (): Promise<PendingChatRequest> =>
+    ipcRenderer.invoke('picker:get-pending'),
   choosePickerAccount: (id: string): void => ipcRenderer.send('picker:choose', id)
 }
 

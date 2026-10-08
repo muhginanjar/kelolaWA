@@ -57,3 +57,4 @@ publish:
   provider: github
   owner: muhginanjar
   repo: kelolaWA
+  releaseType: release

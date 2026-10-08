@@ -25,6 +25,9 @@ declare global {
       renameAccount: (id: string, name: string) => Promise<AccountsState>
       openSettings: () => void
       onActiveAccountChanged: (callback: (id: string) => void) => void
+      getUnreadCounts: () => Promise<Record<string, number>>
+      onUnreadChanged: (callback: (counts: Record<string, number>) => void) => void
+      setBadgeOverlay: (dataUrl: string | null, description: string) => void
       getPendingChatRequest: () => Promise<PendingChatRequest>
       choosePickerAccount: (id: string) => void
     }

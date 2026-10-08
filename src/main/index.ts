@@ -228,6 +228,17 @@ function unregisterAccountShortcuts(): void {
   globalShortcut.unregister(CYCLE_PREV_ACCELERATOR)
 }
 
+// Mirrors the unread-chat total onto the dock (macOS) / launcher (Linux) badge and
+// the tray tooltip, and pushes per-account counts to the rail. Windows has no
+// numeric badge API, so the rail renders an overlay icon and sends it back.
+function updateUnreadBadges(): void {
+  if (!accountManager) return
+  const total = accountManager.totalUnread()
+  if (process.platform !== 'win32') app.setBadgeCount(total)
+  tray?.setToolTip(total > 0 ? `kelolaWA (${total} chat belum dibaca)` : 'kelolaWA')
+  mainWindow?.webContents.send('accounts:unread-changed', accountManager.unreadCounts())
+}
+
 function showMainWindow(): void {
   if (!mainWindow) return
   if (mainWindow.isMinimized()) mainWindow.restore()
@@ -297,7 +308,7 @@ function createMainWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  accountManager = new AccountManager(mainWindow)
+  accountManager = new AccountManager(mainWindow, updateUnreadBadges)
   const account = activeAccount()
   if (account) accountManager.switchTo(account)
 
@@ -470,6 +481,13 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.on('shell:open-settings', () => openSettingsWindow())
+
+  ipcMain.handle('accounts:unread', () => accountManager?.unreadCounts() ?? {})
+
+  ipcMain.on('shell:badge-overlay', (_event, dataUrl: string | null, description: string) => {
+    if (process.platform !== 'win32' || !mainWindow) return
+    mainWindow.setOverlayIcon(dataUrl ? nativeImage.createFromDataURL(dataUrl) : null, description)
+  })
 
   ipcMain.on('wa:online', (_event, accountId: string) => {
     accountManager?.reload(accountId)
