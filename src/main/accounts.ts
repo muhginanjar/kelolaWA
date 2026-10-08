@@ -33,6 +33,14 @@ const PAGE_BRIDGE_SCRIPT = `(() => {
   })
 })()`
 
+// WhatsApp Web is a fixed-size app shell, so its document should never be scrolled;
+// if it gets scrolled anyway (e.g. while laid out at the wrong size), snap it back.
+const RESET_SCROLL_SCRIPT = `(() => {
+  window.scrollTo(0, 0)
+  document.documentElement.scrollTop = 0
+  if (document.body) document.body.scrollTop = 0
+})()`
+
 // WhatsApp Web prefixes the page title with the unread-chat count, e.g. "(3) WhatsApp".
 const UNREAD_TITLE_PATTERN = /^\((\d+)\)/
 
@@ -45,7 +53,7 @@ export class AccountManager {
     private window: BrowserWindow,
     private onUnreadChange: () => void
   ) {
-    this.window.on('resize', () => this.layoutActive())
+    this.window.on('resize', () => this.layoutAll())
   }
 
   private ensure(account: Account): WebContentsView {
@@ -85,6 +93,10 @@ export class AccountManager {
       const match = UNREAD_TITLE_PATTERN.exec(title)
       this.setUnread(account.id, match ? Number(match[1]) : 0)
     })
+    // Background accounts are never attached to the window until switched to, but
+    // they still need real bounds — otherwise WhatsApp lays out at 0x0 and its
+    // page ends up scrolled, showing shifted up once the account is displayed.
+    view.setBounds(this.viewBounds())
     view.webContents.loadURL(WHATSAPP_URL)
 
     this.views.set(account.id, view)
@@ -122,7 +134,8 @@ export class AccountManager {
     }
     this.activeId = account.id
     this.window.contentView.addChildView(view)
-    this.layoutActive()
+    view.setBounds(this.viewBounds())
+    view.webContents.executeJavaScript(RESET_SCROLL_SCRIPT).catch(() => {})
   }
 
   // Deep-links a specific account straight to a chat (from a whatsapp:// link).
@@ -156,11 +169,15 @@ export class AccountManager {
     if (this.unread.delete(id)) this.onUnreadChange()
   }
 
-  layoutActive(): void {
-    if (!this.activeId) return
-    const view = this.views.get(this.activeId)
-    if (!view) return
+  private viewBounds(): Electron.Rectangle {
     const { width, height } = this.window.getContentBounds()
-    view.setBounds({ x: RAIL_WIDTH, y: 0, width: Math.max(width - RAIL_WIDTH, 0), height })
+    return { x: RAIL_WIDTH, y: 0, width: Math.max(width - RAIL_WIDTH, 0), height }
+  }
+
+  // Resizes every account, not just the visible one, so background accounts
+  // always match the window and look right the moment they're switched to.
+  private layoutAll(): void {
+    const bounds = this.viewBounds()
+    for (const view of this.views.values()) view.setBounds(bounds)
   }
 }

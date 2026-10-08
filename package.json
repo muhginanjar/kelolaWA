@@ -1,6 +1,6 @@
 {
   "name": "kelolawa",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "kelolaWA - unofficial WhatsApp Web desktop wrapper with multi-account, native notifications, tray icon and voice/video calling",
   "main": "./out/main/index.js",
   "author": "",

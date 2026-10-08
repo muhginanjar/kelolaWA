@@ -186,6 +186,8 @@
     gap: 10px;
     flex: 1;
     overflow-y: auto;
+    /* Room for the unread badge, which overhangs the avatar's edge. */
+    padding: 4px 8px;
   }
 
   .avatar-wrap {
@@ -227,15 +229,17 @@
 
   .unread {
     position: absolute;
-    bottom: -2px;
+    bottom: -4px;
     right: -6px;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
-    border-radius: 9px;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    box-sizing: border-box;
+    border-radius: 11px;
+    border: 2px solid var(--ev-c-black-soft);
     background: #25d366;
-    color: #fff;
-    font-size: 11px;
+    color: #111b21;
+    font-size: 12px;
     font-weight: 700;
     line-height: 18px;
     text-align: center;
