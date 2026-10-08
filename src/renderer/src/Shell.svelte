@@ -11,6 +11,7 @@
   let newName = $state('')
   let renamingId = $state<string | null>(null)
   let renameValue = $state('')
+  let unread = $state<Record<string, number>>({})
 
   async function refresh(): Promise<void> {
     const state = await window.api.listAccounts()
@@ -23,6 +24,40 @@
   window.api.onActiveAccountChanged((id) => {
     activeId = id
   })
+
+  function badgeLabel(count: number): string {
+    return count > 99 ? '99+' : String(count)
+  }
+
+  // Windows can't show a number on the taskbar button directly, so draw one here
+  // and hand it to the main process as an overlay icon.
+  function renderOverlay(total: number): string | null {
+    if (total <= 0) return null
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 32
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    ctx.fillStyle = '#e53935'
+    ctx.beginPath()
+    ctx.arc(16, 16, 16, 0, Math.PI * 2)
+    ctx.fill()
+    const label = total > 9 ? '9+' : String(total)
+    ctx.fillStyle = '#fff'
+    ctx.font = `bold ${label.length > 1 ? 18 : 22}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(label, 16, 17)
+    return canvas.toDataURL('image/png')
+  }
+
+  function applyUnread(counts: Record<string, number>): void {
+    unread = counts
+    const total = Object.values(counts).reduce((sum, n) => sum + n, 0)
+    window.api.setBadgeOverlay(renderOverlay(total), total > 0 ? `${total} chat belum dibaca` : '')
+  }
+
+  window.api.getUnreadCounts().then(applyUnread)
+  window.api.onUnreadChanged(applyUnread)
 
   async function select(id: string): Promise<void> {
     activeId = id
@@ -94,6 +129,11 @@
           >
             {initials(account.name)}
           </button>
+          {#if unread[account.id]}
+            <span class="unread" aria-label={`${unread[account.id]} chat belum dibaca`}>
+              {badgeLabel(unread[account.id])}
+            </span>
+          {/if}
           <button
             class="remove"
             aria-label={`Hapus akun ${account.name}`}
@@ -183,6 +223,23 @@
     opacity: 0;
     transition: opacity 120ms;
     cursor: pointer;
+  }
+
+  .unread {
+    position: absolute;
+    bottom: -2px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: #25d366;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    pointer-events: none;
   }
 
   .avatar-wrap:hover .remove {
